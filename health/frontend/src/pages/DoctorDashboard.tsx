@@ -1,17 +1,20 @@
+// File: health/frontend/src/pages/DoctorDashboard.tsx
+
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs";
+import { Card, CardContent } from "../components/ui/card";
+import { Button } from "../components/ui/button";
 import { User, List, FileSearch, FilePen, Activity, ShieldAlert, Stethoscope, Bell } from "lucide-react";
-import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "../components/ui/table";
+import { Badge } from "../components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../components/ui/dialog";
+import { Input } from "../components/ui/input";
+import { Textarea } from "../components/ui/textarea";
+import { Label } from "../components/ui/label";
+import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group";
 import { toast } from "sonner";
+import axios from "axios";
 
 // Define interface types
 interface Patient {
@@ -21,6 +24,18 @@ interface Patient {
   condition: string;
   status: string;
   hasAccess: boolean;
+}
+
+interface DoctorProfile {
+  name: string;
+  specialization: string;
+  hospital: string;
+  experience: string;
+  education: string;
+  certifications: string[];
+  contactEmail: string;
+  contactPhone: string;
+  walletAddress: string;
 }
 
 interface PatientRecord {
@@ -49,41 +64,64 @@ const DoctorDashboard = () => {
   const [selectedPatientRecords, setSelectedPatientRecords] = useState<PatientRecord[]>([]);
   const [diagnosisForm, setDiagnosisForm] = useState({ title: "", notes: "", status: "stable" });
 
-  // Mock data
-  const doctorProfile = {
-    name: "Dr. Sarah Johnson",
-    specialization: "Cardiologist",
-    hospital: "Central Medical Center",
-    experience: "12 years",
-    education: "MD, Harvard Medical School",
-    certifications: ["American Board of Internal Medicine", "Cardiovascular Disease"],
-    contactEmail: "sarah.johnson@medcenter.com",
-    contactPhone: "(555) 123-4567",
-    walletAddress: "0x742d35Cc6634C0532925a3b8D404fddF4f8b8E1a"
-  };
+  const [doctorProfile, setDoctorProfile] = useState<DoctorProfile | null>(null); // State to hold doctor profile [!code ++]
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [accessLogs, setAccessLogs] = useState<AccessLog[]>([]);
 
-  const patients: Patient[] = [
-    { id: "1", name: "John Doe", age: 45, condition: "Hypertension", status: "Stable", hasAccess: true },
-    { id: "2", name: "Jane Smith", age: 38, condition: "Arrhythmia", status: "Improving", hasAccess: true },
-    { id: "3", name: "Robert Brown", age: 62, condition: "Post-surgery recovery", status: "Critical", hasAccess: false },
-    { id: "4", name: "Emily Clark", age: 29, condition: "Chest pain investigation", status: "Under observation", hasAccess: true }
-  ];
-
-  const patientRecords: PatientRecord[] = [
+  // Mock data for records and logs until backend is implemented
+  const patientRecords = [
     { id: "1", patientId: "1", date: "2025-01-15", title: "Initial Consultation", content: "Patient presents with elevated blood pressure. Recommended lifestyle changes and medication.", doctor: "Dr. Sarah Johnson", status: "Completed" },
     { id: "2", patientId: "1", date: "2025-01-01", title: "Blood Test Results", content: "Cholesterol levels slightly elevated. Continue current medication.", doctor: "Dr. Sarah Johnson", status: "Reviewed" },
     { id: "3", patientId: "2", date: "2025-01-10", title: "ECG Analysis", content: "Irregular heart rhythm detected. Scheduled for further monitoring.", doctor: "Dr. Sarah Johnson", status: "Pending" }
   ];
 
-  const accessLogs: AccessLog[] = [
+  const mockAccessLogs = [
     { id: "1", user: "Dr. Sarah Johnson", action: "Viewed", patientId: "1", patientName: "John Doe", timestamp: "2025-01-19 14:30" },
     { id: "2", user: "Dr. Sarah Johnson", action: "Added Diagnosis", patientId: "2", patientName: "Jane Smith", timestamp: "2025-01-18 09:15" },
     { id: "3", user: "Dr. Sarah Johnson", action: "Emergency Access", patientId: "3", patientName: "Robert Brown", timestamp: "2025-01-17 16:45" }
   ];
 
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        const patientsResponse = await axios.get('http://localhost:5000/api/patients');
+        setPatients(patientsResponse.data.map((p: any) => ({
+          id: p.id,
+          name: p.full_name,
+          age: 45, // Assuming age is a calculated field or mock
+          condition: p.medical_history || "N/A", // Re-using for now
+          status: "Stable", // Mock status
+          hasAccess: true // Mock access
+        })));
+        // Assuming user data is available after login
+        const userId = 'your_user_id_here'; // Replace with dynamic user id
+        const profileResponse = await axios.get(`http://localhost:5000/api/profile/${userId}`);
+        const profileData = profileResponse.data;
+        setDoctorProfile({
+          name: profileData.full_name,
+          specialization: profileData.additional_info?.specialization || 'N/A',
+          hospital: profileData.additional_info?.hospitalName || 'N/A',
+          experience: 'N/A', // No experience field in DB schema
+          education: profileData.additional_info?.qualification || 'N/A',
+          certifications: [], // No certifications in DB schema
+          contactEmail: profileData.email,
+          contactPhone: profileData.phone || 'N/A',
+          walletAddress: profileData.wallet_address
+        });
+
+        // For now, setting mock access logs
+        setAccessLogs(mockAccessLogs);
+      } catch (error) {
+        console.error("Failed to fetch dashboard data:", error);
+        toast.error("Failed to load dashboard data.");
+      }
+    };
+    fetchDashboardData();
+  }, []);
+
   const handlePatientSelect = (patient: Patient) => {
     setSelectedPatient(patient);
-    
+
     if (patient.hasAccess) {
       const records = patientRecords.filter(record => record.patientId === patient.id);
       setSelectedPatientRecords(records);
@@ -104,14 +142,18 @@ const DoctorDashboard = () => {
   const addDiagnosis = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedPatient) return;
-    
+
     toast.success("Diagnosis Added", {
       description: `New diagnosis has been added to ${selectedPatient.name}'s records`
     });
-    
+
     // Reset form
     setDiagnosisForm({ title: "", notes: "", status: "stable" });
   };
+
+  if (!doctorProfile) {
+    return <div>Loading...</div>; // Add a loading state [!code ++]
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-emerald-50">
@@ -125,7 +167,7 @@ const DoctorDashboard = () => {
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-gray-800">Doctor Dashboard</h1>
-                <p className="text-gray-600">Manage your patients and medical records</p>
+                <p className="text-gray-600">Welcome back, {doctorProfile.name}</p> // [!code ++]
               </div>
             </div>
             <div className="flex items-center space-x-4">
@@ -172,7 +214,7 @@ const DoctorDashboard = () => {
                 Emergency Access
               </TabsTrigger>
             </TabsList>
-            
+
             <CardContent className="pt-6">
               {/* Doctor Profile Tab */}
               <TabsContent value="profile" className="space-y-6">
@@ -196,11 +238,11 @@ const DoctorDashboard = () => {
                       </div>
                     </div>
                   </div>
-                  
+
                   <div className="lg:col-span-2">
                     <div className="bg-white rounded-2xl p-8 border border-primary-100 shadow-lg">
                       <h3 className="text-2xl font-bold text-gray-800 mb-6">Professional Information</h3>
-                      
+
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
                         <div className="space-y-4">
                           <div>
@@ -231,7 +273,7 @@ const DoctorDashboard = () => {
                           </div>
                         </div>
                       </div>
-                      
+
                       <div>
                         <h4 className="text-lg font-semibold text-gray-800 mb-4">Education & Certifications</h4>
                         <p className="text-lg text-gray-800 mb-4">{doctorProfile.education}</p>
@@ -247,14 +289,14 @@ const DoctorDashboard = () => {
                   </div>
                 </div>
               </TabsContent>
-              
+
               {/* Patient List Tab */}
               <TabsContent value="patients" className="space-y-6">
                 <div className="flex justify-between items-center">
                   <h3 className="text-2xl font-bold text-gray-800">Your Patients</h3>
                   <Input placeholder="Search patients..." className="max-w-xs" />
                 </div>
-                
+
                 <div className="bg-white rounded-xl border border-primary-100 overflow-hidden shadow-lg">
                   <Table>
                     <TableHeader>
@@ -275,10 +317,10 @@ const DoctorDashboard = () => {
                           <TableCell>{patient.condition}</TableCell>
                           <TableCell>
                             <Badge className={
-                              patient.status === "Stable" ? "bg-green-100 text-green-800" : 
-                              patient.status === "Critical" ? "bg-red-100 text-red-800" :
-                              patient.status === "Improving" ? "bg-blue-100 text-blue-800" :
-                              "bg-yellow-100 text-yellow-800"
+                              patient.status === "Stable" ? "bg-green-100 text-green-800" :
+                                patient.status === "Critical" ? "bg-red-100 text-red-800" :
+                                  patient.status === "Improving" ? "bg-blue-100 text-blue-800" :
+                                    "bg-yellow-100 text-yellow-800"
                             }>
                               {patient.status}
                             </Badge>
@@ -289,9 +331,9 @@ const DoctorDashboard = () => {
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right space-x-2">
-                            <Button 
-                              variant="outline" 
-                              size="sm" 
+                            <Button
+                              variant="outline"
+                              size="sm"
                               onClick={() => {
                                 handlePatientSelect(patient);
                                 setActiveTab("records");
@@ -300,8 +342,8 @@ const DoctorDashboard = () => {
                               View Records
                             </Button>
                             {!patient.hasAccess && (
-                              <Button 
-                                variant="outline" 
+                              <Button
+                                variant="outline"
                                 size="sm"
                                 onClick={() => requestEmergencyAccess(patient.id)}
                                 className="text-red-600 border-red-200 hover:bg-red-50"
@@ -316,17 +358,17 @@ const DoctorDashboard = () => {
                   </Table>
                 </div>
               </TabsContent>
-              
+
               {/* Patient Records Tab */}
               <TabsContent value="records" className="space-y-6">
                 <div className="flex justify-between items-center">
                   <h3 className="text-2xl font-bold text-gray-800">
-                    {selectedPatient 
+                    {selectedPatient
                       ? `Medical Records: ${selectedPatient.name}`
                       : "Select a patient to view records"}
                   </h3>
                 </div>
-                
+
                 {selectedPatient ? (
                   selectedPatient.hasAccess ? (
                     selectedPatientRecords.length > 0 ? (
@@ -349,10 +391,10 @@ const DoctorDashboard = () => {
                                 <TableCell>{record.doctor}</TableCell>
                                 <TableCell>
                                   <Badge className={
-                                    record.status === "Completed" ? "bg-green-100 text-green-800" : 
-                                    record.status === "Pending" ? "bg-yellow-100 text-yellow-800" :
-                                    record.status === "New" ? "bg-blue-100 text-blue-800" :
-                                    "bg-gray-100 text-gray-800"
+                                    record.status === "Completed" ? "bg-green-100 text-green-800" :
+                                      record.status === "Pending" ? "bg-yellow-100 text-yellow-800" :
+                                        record.status === "New" ? "bg-blue-100 text-blue-800" :
+                                          "bg-gray-100 text-gray-800"
                                   }>
                                     {record.status}
                                   </Badge>
@@ -402,7 +444,7 @@ const DoctorDashboard = () => {
                     <div className="text-center py-12 bg-red-50 rounded-xl border border-red-200">
                       <ShieldAlert className="h-12 w-12 text-red-500 mx-auto mb-4" />
                       <p className="text-lg text-red-700 mb-4">You do not have permission to view this patient's records.</p>
-                      <Button 
+                      <Button
                         onClick={() => requestEmergencyAccess(selectedPatient.id)}
                         className="bg-red-600 hover:bg-red-700"
                       >
@@ -421,11 +463,11 @@ const DoctorDashboard = () => {
                   </div>
                 )}
               </TabsContent>
-              
+
               {/* Add Diagnosis Tab */}
               <TabsContent value="addDiagnosis" className="space-y-6">
                 <h3 className="text-2xl font-bold text-gray-800">Add New Diagnosis</h3>
-                
+
                 {selectedPatient ? (
                   selectedPatient.hasAccess ? (
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -448,10 +490,10 @@ const DoctorDashboard = () => {
                             <div>
                               <p className="text-sm font-medium text-gray-500">Status</p>
                               <Badge className={
-                                selectedPatient.status === "Stable" ? "bg-green-100 text-green-800" : 
-                                selectedPatient.status === "Critical" ? "bg-red-100 text-red-800" :
-                                selectedPatient.status === "Improving" ? "bg-blue-100 text-blue-800" :
-                                "bg-yellow-100 text-yellow-800"
+                                selectedPatient.status === "Stable" ? "bg-green-100 text-green-800" :
+                                  selectedPatient.status === "Critical" ? "bg-red-100 text-red-800" :
+                                    selectedPatient.status === "Improving" ? "bg-blue-100 text-blue-800" :
+                                      "bg-yellow-100 text-yellow-800"
                               }>
                                 {selectedPatient.status}
                               </Badge>
@@ -459,39 +501,39 @@ const DoctorDashboard = () => {
                           </div>
                         </div>
                       </div>
-                      
+
                       <div className="lg:col-span-2">
                         <div className="bg-white rounded-xl p-8 border border-primary-100 shadow-lg">
                           <form onSubmit={addDiagnosis} className="space-y-6">
                             <div>
                               <Label htmlFor="title" className="text-base font-medium">Diagnosis Title</Label>
-                              <Input 
-                                id="title" 
-                                placeholder="Enter diagnosis title..." 
+                              <Input
+                                id="title"
+                                placeholder="Enter diagnosis title..."
                                 value={diagnosisForm.title}
-                                onChange={(e) => setDiagnosisForm(prev => ({ ...prev, title: e.target.value }))}
+                                onChange={(e: any) => setDiagnosisForm(prev => ({ ...prev, title: e.target.value }))}
                                 required
                                 className="mt-2"
                               />
                             </div>
-                            
+
                             <div>
                               <Label htmlFor="notes" className="text-base font-medium">Notes</Label>
-                              <Textarea 
-                                id="notes" 
-                                placeholder="Enter detailed notes about the diagnosis..." 
+                              <Textarea
+                                id="notes"
+                                placeholder="Enter detailed notes about the diagnosis..."
                                 className="min-h-[150px] mt-2"
                                 value={diagnosisForm.notes}
-                                onChange={(e) => setDiagnosisForm(prev => ({ ...prev, notes: e.target.value }))}
+                                onChange={(e: any) => setDiagnosisForm(prev => ({ ...prev, notes: e.target.value }))}
                                 required
                               />
                             </div>
-                            
+
                             <div>
                               <Label className="text-base font-medium">Status Assessment</Label>
-                              <RadioGroup 
-                                value={diagnosisForm.status} 
-                                onValueChange={(value) => setDiagnosisForm(prev => ({ ...prev, status: value }))}
+                              <RadioGroup
+                                value={diagnosisForm.status}
+                                onValueChange={(value: any) => setDiagnosisForm(prev => ({ ...prev, status: value }))}
                                 className="mt-3"
                               >
                                 <div className="grid grid-cols-2 gap-4">
@@ -514,7 +556,7 @@ const DoctorDashboard = () => {
                                 </div>
                               </RadioGroup>
                             </div>
-                            
+
                             <Button type="submit" className="bg-primary-600 hover:bg-primary-700 w-full h-12">
                               <FilePen className="h-4 w-4 mr-2" />
                               Save Diagnosis
@@ -527,7 +569,7 @@ const DoctorDashboard = () => {
                     <div className="text-center py-12 bg-red-50 rounded-xl border border-red-200">
                       <ShieldAlert className="h-12 w-12 text-red-500 mx-auto mb-4" />
                       <p className="text-lg text-red-700 mb-4">You do not have permission to add diagnosis for this patient.</p>
-                      <Button 
+                      <Button
                         onClick={() => requestEmergencyAccess(selectedPatient.id)}
                         className="bg-red-600 hover:bg-red-700"
                       >
@@ -546,7 +588,7 @@ const DoctorDashboard = () => {
                   </div>
                 )}
               </TabsContent>
-              
+
               {/* Access Logs Tab */}
               <TabsContent value="accessLogs" className="space-y-6">
                 <div className="flex justify-between items-center">
@@ -555,7 +597,7 @@ const DoctorDashboard = () => {
                     <Activity className="h-4 w-4 mr-2" /> Export Logs
                   </Button>
                 </div>
-                
+
                 <div className="bg-white rounded-xl border border-primary-100 overflow-hidden shadow-lg">
                   <Table>
                     <TableHeader>
@@ -574,10 +616,10 @@ const DoctorDashboard = () => {
                           <TableCell>{log.user}</TableCell>
                           <TableCell>
                             <Badge className={
-                              log.action === "Viewed" ? "bg-blue-100 text-blue-800" : 
-                              log.action === "Added Diagnosis" ? "bg-green-100 text-green-800" :
-                              log.action === "Emergency Access" ? "bg-red-100 text-red-800" :
-                              "bg-gray-100 text-gray-800"
+                              log.action === "Viewed" ? "bg-blue-100 text-blue-800" :
+                                log.action === "Added Diagnosis" ? "bg-green-100 text-green-800" :
+                                  log.action === "Emergency Access" ? "bg-red-100 text-red-800" :
+                                    "bg-gray-100 text-gray-800"
                             }>
                               {log.action}
                             </Badge>
@@ -592,7 +634,7 @@ const DoctorDashboard = () => {
                   </Table>
                 </div>
               </TabsContent>
-              
+
               {/* Emergency Access Tab */}
               <TabsContent value="emergency" className="space-y-6">
                 <div className="bg-red-50 border border-red-200 rounded-xl p-6">
@@ -608,7 +650,7 @@ const DoctorDashboard = () => {
                     Please use this feature responsibly and only when medically necessary.
                   </p>
                 </div>
-                
+
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                   <div>
                     <h4 className="text-lg font-semibold text-gray-800 mb-4">Patients Without Access</h4>
@@ -630,14 +672,14 @@ const DoctorDashboard = () => {
                                 <TableCell>
                                   <Badge className={
                                     patient.status === "Critical" ? "bg-red-100 text-red-800" :
-                                    patient.status === "Stable" ? "bg-green-100 text-green-800" :
-                                    "bg-yellow-100 text-yellow-800"
+                                      patient.status === "Stable" ? "bg-green-100 text-green-800" :
+                                        "bg-yellow-100 text-yellow-800"
                                   }>
                                     {patient.status}
                                   </Badge>
                                 </TableCell>
                                 <TableCell className="text-right">
-                                  <Button 
+                                  <Button
                                     className="bg-red-600 hover:bg-red-700"
                                     size="sm"
                                     onClick={() => requestEmergencyAccess(patient.id)}
@@ -659,7 +701,7 @@ const DoctorDashboard = () => {
                       </Table>
                     </div>
                   </div>
-                  
+
                   <div>
                     <h4 className="text-lg font-semibold text-gray-800 mb-4">Recent Emergency Access Logs</h4>
                     <div className="bg-white rounded-xl border border-primary-100 overflow-hidden shadow-lg">

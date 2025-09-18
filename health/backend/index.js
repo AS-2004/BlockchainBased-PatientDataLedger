@@ -1,3 +1,5 @@
+// File: health/backend/index.js
+
 const express = require('express');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
@@ -18,6 +20,32 @@ app.use(express.json());
 
 // Pinata SDK initialization
 const pinata = new pinataSDK({ pinataApiKey: process.env.PINATA_API_KEY, pinataSecretApiKey: process.env.PINATA_SECRET_API_KEY });
+
+async function testPinataConnection() {
+    try {
+        const result = await pinata.testAuthentication();
+        if (result.authenticated) {
+            console.log('✅ Pinata connection successful');
+        } else {
+            console.error('❌ Pinata authentication failed');
+        }
+    } catch (error) {
+        console.error('❌ Error connecting to Pinata:', error.message);
+    }
+}
+
+// Authentication middleware
+const authenticateToken = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    if (token == null) return res.sendStatus(401);
+
+    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+        if (err) return res.sendStatus(403);
+        req.user = user;
+        next();
+    });
+};
 
 // File upload configuration
 const uploadDir = 'uploads/';
@@ -157,6 +185,22 @@ async function initializeDatabase() {
       )
     `);
 
+        // Add new appointments table
+        await connection.execute(`
+      CREATE TABLE IF NOT EXISTS appointments (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        patient_id INT NOT NULL,
+        doctor_id INT NOT NULL,
+        appointment_date DATE NOT NULL,
+        appointment_time TIME NOT NULL,
+        reason TEXT,
+        status ENUM('pending', 'confirmed', 'cancelled', 'completed') DEFAULT 'pending',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+        FOREIGN KEY (doctor_id) REFERENCES doctors(id) ON DELETE CASCADE
+      )
+    `);
+
         connection.release();
         console.log('✅ Database tables initialized successfully');
     } catch (error) {
@@ -203,7 +247,7 @@ app.post('/api/register/patient', upload.single('medicalRecord'), async (req, re
                 const readableStreamForFile = fs.createReadStream(file.path);
                 const pinataResponse = await pinata.pinFileToIPFS(readableStreamForFile);
                 ipfsHash = pinataResponse.IpfsHash;
-                fs.unlinkSync(file.path); // Clean up the local file
+                fs.unlinkSync(file.path);
             } catch (uploadError) {
                 console.error('IPFS upload failed:', uploadError);
                 await conn.rollback();
@@ -311,13 +355,6 @@ app.post('/api/login', async (req, res) => {
             return res.status(400).json({ error: 'Wallet address is required' });
         }
 
-        // For a real application, you must verify the signature here.
-        // Ethers.js can be used for verification.
-        // Example: const recoveredAddress = ethers.utils.verifyMessage(message, signature);
-        // if (recoveredAddress.toLowerCase() !== walletAddress.toLowerCase()) {
-        //     return res.status(401).json({ error: 'Invalid signature' });
-        // }
-
         const [users] = await pool.execute(
             'SELECT id, user_type, full_name, email FROM users WHERE wallet_address = ?',
             [walletAddress]
@@ -352,6 +389,73 @@ app.post('/api/login', async (req, res) => {
         res.status(500).json({ error: 'Login failed. Please try again.' });
     }
 });
+
+// Upload medical record endpoint
+app.post('/api/medical-records/upload', authenticateToken, upload.single('medicalRecord'), async (req, res) => {
+    const conn = await pool.getConnection();
+    try {
+        const file = req.file;
+        const { title, recordType, patientId } = req.body;
+
+        if (!file || !title || !recordType || !patientId) {
+            return res.status(400).json({ error: 'Missing required fields' });
+        }
+
+        let ipfsHash = null;
+        try {
+            const readableStreamForFile = fs.createReadStream(file.path);
+            const pinataResponse = await pinata.pinFileToIPFS(readableStreamForFile);
+            ipfsHash = pinataResponse.IpfsHash;
+            fs.unlinkSync(file.path);
+        } catch (uploadError) {
+            console.error('IPFS upload failed:', uploadError);
+            return res.status(500).json({ error: 'Failed to upload medical record to IPFS' });
+        }
+
+        await conn.execute(
+            `INSERT INTO medical_records (patient_id, doctor_id, title, record_type, file_ipfs_hash)
+             VALUES (?, ?, ?, ?, ?)`,
+            [patientId, req.user.userType === 'doctor' ? req.user.userId : null, title, recordType, ipfsHash]
+        );
+
+        res.status(201).json({ message: 'Medical record uploaded successfully', ipfsHash });
+
+    } catch (err) {
+        console.error('Record upload error:', err);
+        res.status(500).json({ error: 'Record upload failed' });
+    } finally {
+        conn.release();
+    }
+});
+
+// Book appointment endpoint
+app.post('/api/appointments', authenticateToken, async (req, res) => {
+    const conn = await pool.getConnection();
+    try {
+        const { doctorId, appointmentDate, appointmentTime, reason } = req.body;
+
+        if (!doctorId || !appointmentDate || !appointmentTime) {
+            return res.status(400).json({ error: 'Missing required appointment fields' });
+        }
+
+        const patientId = req.user.userId;
+
+        await conn.execute(
+            `INSERT INTO appointments (patient_id, doctor_id, appointment_date, appointment_time, reason, status)
+             VALUES (?, ?, ?, ?, ?, 'pending')`,
+            [patientId, doctorId, appointmentDate, appointmentTime, reason || null]
+        );
+
+        res.status(201).json({ message: 'Appointment request sent successfully' });
+
+    } catch (err) {
+        console.error('Appointment booking error:', err);
+        res.status(500).json({ error: 'Appointment booking failed' });
+    } finally {
+        conn.release();
+    }
+});
+
 
 // Get user profile endpoint
 app.get('/api/profile/:userId', async (req, res) => {
@@ -469,6 +573,7 @@ app.listen(PORT, async () => {
     console.log(`🚀 MedChain API Server running on port ${PORT}`);
     console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
     await initializeDatabase();
+    await testPinataConnection();
 });
 
 module.exports = app;

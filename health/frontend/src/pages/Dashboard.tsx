@@ -1,14 +1,16 @@
-import React, { useState } from 'react';
+// File: health/frontend/src/pages/Dashboard.tsx
+
+import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Link } from 'react-router-dom';
-import { 
-  FileText, 
-  Calendar, 
-  User, 
-  Settings, 
-  Share2, 
-  Shield, 
+import {
+  FileText,
+  Calendar,
+  User,
+  Settings,
+  Share2,
+  Shield,
   Download,
   Plus,
   Activity,
@@ -16,19 +18,108 @@ import {
   Stethoscope,
   Bell
 } from 'lucide-react';
+import axios from 'axios';
+import { toast } from 'sonner';
+import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const Dashboard = () => {
-  const [notifications] = useState([
+  const [notifications, setNotifications] = useState([
     { id: 1, message: "Dr. Smith requested access to your records", time: "2 hours ago", type: "access" },
     { id: 2, message: "New lab results available", time: "1 day ago", type: "results" },
     { id: 3, message: "Appointment reminder: Tomorrow at 2 PM", time: "1 day ago", type: "appointment" }
   ]);
 
-  const [recentActivity] = useState([
+  const [recentActivity, setRecentActivity] = useState([
     { id: 1, action: "Shared records with Dr. Johnson", date: "2025-01-19", type: "share" },
     { id: 2, action: "Uploaded new lab results", date: "2025-01-18", type: "upload" },
     { id: 3, action: "Updated profile information", date: "2025-01-17", type: "update" }
   ]);
+
+  const [doctors, setDoctors] = useState([]);
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [isAppointmentModalOpen, setIsAppointmentModalOpen] = useState(false);
+  const [fileToUpload, setFileToUpload] = useState<File | null>(null);
+  const [fileTitle, setFileTitle] = useState('');
+  const [fileType, setFileType] = useState('');
+  const [appointmentDetails, setAppointmentDetails] = useState({
+    doctorId: '',
+    date: '',
+    time: '',
+    reason: '',
+  });
+
+  useEffect(() => {
+    const fetchDoctors = async () => {
+      try {
+        const response = await axios.get('http://localhost:5000/api/doctors');
+        setDoctors(response.data);
+      } catch (error) {
+        console.error("Failed to fetch doctors:", error);
+        toast.error("Failed to load doctors list.");
+      }
+    };
+    fetchDoctors();
+  }, []);
+
+  // Handle file upload form submission
+  const handleFileUpload = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!fileToUpload || !fileTitle || !fileType) {
+      toast.error('Please fill in all fields and select a file.');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('medicalRecord', fileToUpload);
+    formData.append('title', fileTitle);
+    formData.append('recordType', fileType);
+    // You would get the patientId from user state after login
+    formData.append('patientId', '1'); // Example patient ID
+
+    try {
+      // Replace with your actual authentication token
+      const token = 'your-auth-token';
+      await axios.post('http://localhost:5000/api/medical-records/upload', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          'Authorization': `Bearer ${token}`
+        },
+      });
+      toast.success('Medical record uploaded successfully!');
+      setIsUploadModalOpen(false);
+    } catch (error) {
+      console.error('Upload failed:', error);
+      toast.error('Failed to upload medical record.');
+    }
+  };
+
+  // Handle appointment booking form submission
+  const handleAppointmentBooking = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!appointmentDetails.doctorId || !appointmentDetails.date || !appointmentDetails.time) {
+      toast.error('Please fill in all required fields.');
+      return;
+    }
+
+    try {
+      // Replace with your actual authentication token
+      const token = 'your-auth-token';
+      await axios.post('http://localhost:5000/api/appointments', appointmentDetails, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      toast.success('Appointment request sent successfully!');
+      setIsAppointmentModalOpen(false);
+    } catch (error) {
+      console.error('Appointment booking failed:', error);
+      toast.error('Failed to book appointment.');
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-emerald-50">
@@ -76,7 +167,7 @@ const Dashboard = () => {
               </div>
             </CardContent>
           </Card>
-          
+
           <Card className="bg-gradient-to-r from-emerald-500 to-emerald-600 text-white border-0">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
@@ -88,7 +179,7 @@ const Dashboard = () => {
               </div>
             </CardContent>
           </Card>
-          
+
           <Card className="bg-gradient-to-r from-blue-500 to-blue-600 text-white border-0">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
@@ -100,7 +191,7 @@ const Dashboard = () => {
               </div>
             </CardContent>
           </Card>
-          
+
           <Card className="bg-gradient-to-r from-purple-500 to-purple-600 text-white border-0">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
@@ -126,18 +217,117 @@ const Dashboard = () => {
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Button className="h-20 bg-primary-600 hover:bg-primary-700 flex flex-col items-center justify-center space-y-2">
-                    <Plus className="h-6 w-6" />
-                    <span>Upload Records</span>
-                  </Button>
+                  <Dialog open={isUploadModalOpen} onOpenChange={setIsUploadModalOpen}>
+                    <DialogTrigger asChild>
+                      <Button className="h-20 bg-primary-600 hover:bg-primary-700 flex flex-col items-center justify-center space-y-2">
+                        <Plus className="h-6 w-6" />
+                        <span>Upload Records</span>
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-[425px]">
+                      <DialogHeader>
+                        <DialogTitle>Upload Medical Record</DialogTitle>
+                      </DialogHeader>
+                      <form onSubmit={handleFileUpload} className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="fileTitle">Record Title</Label>
+                          <Input
+                            id="fileTitle"
+                            placeholder="e.g., Annual Check-up Report"
+                            value={fileTitle}
+                            onChange={(e) => setFileTitle(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="fileType">Record Type</Label>
+                          <Select onValueChange={setFileType} value={fileType}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select record type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Lab Results">Lab Results</SelectItem>
+                              <SelectItem value="Prescription">Prescription</SelectItem>
+                              <SelectItem value="Imaging">Imaging</SelectItem>
+                              <SelectItem value="Consultation">Consultation Notes</SelectItem>
+                              <SelectItem value="Other">Other</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="file">File</Label>
+                          <Input
+                            id="file"
+                            type="file"
+                            required
+                            onChange={(e) => e.target.files && setFileToUpload(e.target.files[0])}
+                          />
+                        </div>
+                        <Button type="submit" className="w-full">Upload File</Button>
+                      </form>
+                    </DialogContent>
+                  </Dialog>
                   <Button variant="outline" className="h-20 border-primary-200 hover:bg-primary-50 flex flex-col items-center justify-center space-y-2">
                     <Share2 className="h-6 w-6 text-primary-600" />
                     <span>Share with Doctor</span>
                   </Button>
-                  <Button variant="outline" className="h-20 border-primary-200 hover:bg-primary-50 flex flex-col items-center justify-center space-y-2">
-                    <Calendar className="h-6 w-6 text-primary-600" />
-                    <span>Book Appointment</span>
-                  </Button>
+                  <Dialog open={isAppointmentModalOpen} onOpenChange={setIsAppointmentModalOpen}>
+                    <DialogTrigger asChild>
+                      <Button variant="outline" className="h-20 border-primary-200 hover:bg-primary-50 flex flex-col items-center justify-center space-y-2">
+                        <Calendar className="h-6 w-6 text-primary-600" />
+                        <span>Book Appointment</span>
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-[425px]">
+                      <DialogHeader>
+                        <DialogTitle>Book an Appointment</DialogTitle>
+                      </DialogHeader>
+                      <form onSubmit={handleAppointmentBooking} className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="doctor">Select Doctor</Label>
+                          <Select onValueChange={(value) => setAppointmentDetails(prev => ({ ...prev, doctorId: value }))}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Choose a doctor" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {doctors.map(doctor => (
+                                <SelectItem key={doctor.id} value={doctor.id}>
+                                  {doctor.full_name} ({doctor.specialization})
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="date">Date</Label>
+                          <Input
+                            id="date"
+                            type="date"
+                            value={appointmentDetails.date}
+                            onChange={(e) => setAppointmentDetails(prev => ({ ...prev, date: e.target.value }))}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="time">Time</Label>
+                          <Input
+                            id="time"
+                            type="time"
+                            value={appointmentDetails.time}
+                            onChange={(e) => setAppointmentDetails(prev => ({ ...prev, time: e.target.value }))}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="reason">Reason for Visit (Optional)</Label>
+                          <Textarea
+                            id="reason"
+                            placeholder="Describe the reason for your visit..."
+                            value={appointmentDetails.reason}
+                            onChange={(e) => setAppointmentDetails(prev => ({ ...prev, reason: e.target.value }))}
+                          />
+                        </div>
+                        <Button type="submit" className="w-full">Request Appointment</Button>
+                      </form>
+                    </DialogContent>
+                  </Dialog>
                   <Button variant="outline" className="h-20 border-primary-200 hover:bg-primary-50 flex flex-col items-center justify-center space-y-2">
                     <Download className="h-6 w-6 text-primary-600" />
                     <span>Download Records</span>
