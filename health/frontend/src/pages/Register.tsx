@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Link, useNavigate } from "react-router-dom";
 import { MetamaskConnect } from "@/components/MetamaskConnect";
-import { CalendarIcon, Briefcase as BriefcaseMedical, Phone, Car as IdCard, Stethoscope, ArrowLeft } from "lucide-react";
+import { CalendarIcon, Briefcase as BriefcaseMedical, Stethoscope, ArrowLeft } from "lucide-react";
 import { format } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -24,19 +24,29 @@ const Register = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
 
-  // Individual state variables like Code 2
-  const [fullName, setFullName] = useState("");
-  const [medicalId, setMedicalId] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [gender, setGender] = useState("");
-  const [address, setAddress] = useState("");
-  const [bloodGroup, setBloodGroup] = useState("");
-  const [qualification, setQualification] = useState("");
-  const [specialization, setSpecialization] = useState("");
-  const [hospitalName, setHospitalName] = useState("");
-  const [medicalHistory, setMedicalHistory] = useState("");
+  const [formData, setFormData] = useState({
+    fullName: "",
+    medicalId: "",
+    email: "",
+    phone: "",
+    gender: "",
+    address: "",
+    bloodGroup: "",
+    qualification: "",
+    specialization: "",
+    hospitalName: "",
+    medicalHistory: "",
+  });
   const [medicalRecordFile, setMedicalRecordFile] = useState<File | null>(null);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { id, value } = e.target;
+    setFormData(prev => ({ ...prev, [id]: value }));
+  };
+
+  const handleSelectChange = (id: string) => (value: string) => {
+    setFormData(prev => ({ ...prev, [id]: value }));
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -55,127 +65,119 @@ const Register = () => {
       return false;
     }
 
-    if (!fullName.trim()) {
+    if (!formData.fullName.trim()) {
       toast.error("Please enter your full name");
       return false;
     }
 
-    if (!email.trim()) {
+    if (!formData.email.trim()) {
       toast.error("Please enter your email address");
       return false;
     }
 
-    if (!gender) {
+    if (!formData.gender) {
       toast.error("Please select your gender");
       return false;
     }
 
     if (userType === "doctor") {
-      if (!medicalId.trim()) {
+      if (!formData.medicalId.trim()) {
         toast.error("Please enter your medical registration ID");
         return false;
       }
-      if (!specialization.trim()) {
+      if (!formData.specialization.trim()) {
         toast.error("Please enter your specialization");
         return false;
       }
-      if (!qualification.trim()) {
+      if (!formData.qualification.trim()) {
         toast.error("Please enter your qualification");
         return false;
       }
-      if (!hospitalName.trim()) {
+      if (!formData.hospitalName.trim()) {
         toast.error("Please enter your hospital/clinic name");
         return false;
       }
     }
 
-    if (userType === "patient") {
-      if (!address.trim()) {
-        toast.error("Please enter your address");
-        return false;
-      }
+    if (userType === "patient" && !formData.address.trim()) {
+      toast.error("Please enter your address");
+      return false;
     }
 
     return true;
   };
-const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
 
-  if (!validateForm()) {
-    return;
-  }
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
 
-  setIsSubmitting(true);
+    if (!validateForm()) {
+      return;
+    }
 
-  try {
-    toast.info("Processing transaction...", {
-      description: "Gas fees will be deducted from your wallet"
-    });
+    setIsSubmitting(true);
 
-    // Register user based on type
-    if (userType === "patient") {
-      const formData = new FormData();
-      formData.append("walletAddress", walletAddress);
-      formData.append("fullName", fullName);
-      formData.append("email", email);
-      formData.append("phone", phone);
-      formData.append("gender", gender);
-      formData.append("address", address);
-      formData.append("dateOfBirth", date ? date.toISOString().slice(0, 10) : "");
-      formData.append("bloodGroup", bloodGroup);
-      formData.append("medicalHistory", medicalHistory);
-      if (medicalRecordFile) {
-        formData.append("medicalRecord", medicalRecordFile);  // Attach file directly here
-      }
-
-      await axios.post("http://localhost:5000/api/register/patient", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
+    try {
+      toast.info("Processing transaction...", {
+        description: "Gas fees will be deducted from your wallet"
       });
 
-      console.log("Patient registration sent with FormData.");
-    } else {
-      const doctorData = {
+      const commonData = {
         walletAddress,
-        fullName,
-        medicalId,
-        email,
-        phone,
-        gender,
-        qualification,
-        specialization,
-        hospitalName,
-        dateOfBirth: date ? date.toISOString().slice(0, 10) : null,
+        fullName: formData.fullName,
+        email: formData.email,
+        phone: formData.phone,
+        gender: formData.gender,
+        dateOfBirth: date ? format(date, "yyyy-MM-dd") : null,
       };
 
-      await axios.post("http://localhost:5000/api/register/doctor", doctorData);
-      console.log("Doctor registration data:", doctorData);
+      if (userType === "patient") {
+        const patientFormData = new FormData();
+        Object.entries(commonData).forEach(([key, value]) => patientFormData.append(key, value as string));
+        patientFormData.append("address", formData.address);
+        patientFormData.append("bloodGroup", formData.bloodGroup);
+        patientFormData.append("medicalHistory", formData.medicalHistory);
+        if (medicalRecordFile) {
+          patientFormData.append("medicalRecord", medicalRecordFile);
+        }
+
+        await axios.post("http://localhost:5000/api/register/patient", patientFormData, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+
+      } else {
+        const doctorData = {
+          ...commonData,
+          medicalId: formData.medicalId,
+          specialization: formData.specialization,
+          qualification: formData.qualification,
+          hospitalName: formData.hospitalName
+        };
+        await axios.post("http://localhost:5000/api/register/doctor", doctorData);
+      }
+
+      toast.success("Account created successfully!", {
+        description: "Welcome to MedChain! You can now access your dashboard."
+      });
+
+      if (userType === "doctor") {
+        navigate("/doctordashboard");
+      } else {
+        navigate("/patientdashboard");
+      }
+
+    } catch (err) {
+      toast.error("Registration failed", {
+        description: "Please try again or contact support"
+      });
+      console.error("Registration error:", err);
+    } finally {
+      setIsSubmitting(false);
     }
-
-    toast.success("Account created successfully!", {
-      description: "Welcome to MedChain! You can now access your dashboard."
-    });
-
-    // Navigate to dashboard
-    if (userType === "doctor") {
-      navigate("/doctordashboard");
-    } else {
-      navigate("/patientdashboard");
-    }
-
-  } catch (err) {
-    toast.error("Registration failed", {
-      description: "Please try again or contact support"
-    });
-    console.error("Registration error:", err);
-  } finally {
-    setIsSubmitting(false);
-  }
-};
+  };
 
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-emerald-50 py-12 px-4">
-      {/* Background Pattern */}
       <div className="absolute inset-0 opacity-5">
         <div className="absolute top-20 left-20 w-32 h-32 bg-primary-400 rounded-full blur-3xl animate-pulse-soft"></div>
         <div className="absolute bottom-32 right-32 w-40 h-40 bg-emerald-400 rounded-full blur-3xl animate-pulse-soft"></div>
@@ -196,7 +198,7 @@ const handleSubmit = async (e: React.FormEvent) => {
               </p>
             </div>
           </CardHeader>
-          
+
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
               {/* User Type Selection */}
@@ -224,6 +226,7 @@ const handleSubmit = async (e: React.FormEvent) => {
                 <MetamaskConnect
                   walletAddress={walletAddress}
                   setWalletAddress={setWalletAddress}
+                  showSignButton={false}
                 />
               </div>
 
@@ -235,8 +238,8 @@ const handleSubmit = async (e: React.FormEvent) => {
                     id="fullName"
                     placeholder="Enter your full name"
                     required
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
+                    value={formData.fullName}
+                    onChange={handleInputChange}
                   />
                 </div>
 
@@ -247,8 +250,8 @@ const handleSubmit = async (e: React.FormEvent) => {
                     type="email"
                     placeholder="your@email.com"
                     required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    value={formData.email}
+                    onChange={handleInputChange}
                   />
                 </div>
               </div>
@@ -260,7 +263,7 @@ const handleSubmit = async (e: React.FormEvent) => {
                     <BriefcaseMedical className="h-5 w-5 mr-2" />
                     Professional Information
                   </h3>
-                  
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="medicalId">Medical Registration ID *</Label>
@@ -268,8 +271,8 @@ const handleSubmit = async (e: React.FormEvent) => {
                         id="medicalId"
                         placeholder="Your medical license number"
                         required
-                        value={medicalId}
-                        onChange={(e) => setMedicalId(e.target.value)}
+                        value={formData.medicalId}
+                        onChange={handleInputChange}
                       />
                     </div>
 
@@ -279,8 +282,8 @@ const handleSubmit = async (e: React.FormEvent) => {
                         id="specialization"
                         placeholder="e.g., Cardiology, Neurology"
                         required
-                        value={specialization}
-                        onChange={(e) => setSpecialization(e.target.value)}
+                        value={formData.specialization}
+                        onChange={handleInputChange}
                       />
                     </div>
                   </div>
@@ -292,8 +295,8 @@ const handleSubmit = async (e: React.FormEvent) => {
                         id="qualification"
                         placeholder="e.g., MBBS, MD, MS"
                         required
-                        value={qualification}
-                        onChange={(e) => setQualification(e.target.value)}
+                        value={formData.qualification}
+                        onChange={handleInputChange}
                       />
                     </div>
 
@@ -303,8 +306,8 @@ const handleSubmit = async (e: React.FormEvent) => {
                         id="hospitalName"
                         placeholder="Your workplace"
                         required
-                        value={hospitalName}
-                        onChange={(e) => setHospitalName(e.target.value)}
+                        value={formData.hospitalName}
+                        onChange={handleInputChange}
                       />
                     </div>
                   </div>
@@ -319,21 +322,21 @@ const handleSubmit = async (e: React.FormEvent) => {
                     id="phone"
                     type="tel"
                     placeholder="+91 xxxxxxxxxx"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
+                    value={formData.phone}
+                    onChange={handleInputChange}
                   />
                 </div>
 
                 <div className="space-y-2">
                   <Label>Gender *</Label>
-                  <Select value={gender} onValueChange={(value) => setGender(value)}>
+                  <Select value={formData.gender} onValueChange={handleSelectChange("gender")}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select gender" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Male">Male</SelectItem>
-                      <SelectItem value="Female">Female</SelectItem>
-                      <SelectItem value="Other">Other</SelectItem>
+                      <SelectItem value="male">Male</SelectItem>
+                      <SelectItem value="female">Female</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -343,15 +346,15 @@ const handleSubmit = async (e: React.FormEvent) => {
               {userType === "patient" && (
                 <div className="space-y-4 p-4 bg-primary-50 rounded-lg border border-primary-200">
                   <h3 className="font-semibold text-primary-800">Personal Information</h3>
-                  
+
                   <div className="space-y-2">
                     <Label htmlFor="address">Address *</Label>
                     <Input
                       id="address"
                       placeholder="Your home address"
                       required
-                      value={address}
-                      onChange={(e) => setAddress(e.target.value)}
+                      value={formData.address}
+                      onChange={handleInputChange}
                     />
                   </div>
                 </div>
@@ -359,38 +362,37 @@ const handleSubmit = async (e: React.FormEvent) => {
 
               {/* Date of Birth and Blood Group */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Date of Birth</Label>
-                <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      type="button"  // Add this line!
-                      variant="outline"
-                      className={cn(
-                        "w-full justify-start text-left font-normal",
-                        !date && "text-gray-500"
-                      )}
-                      onClick={() => setCalendarOpen(true)}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {date ? format(date, "PPP") : <span>Select date</span>}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={date}
-                      onSelect={handleDateSelect}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
+                <div className="space-y-2">
+                  <Label>Date of Birth</Label>
+                  <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className={cn(
+                          "w-full justify-start text-left font-normal",
+                          !date && "text-gray-500"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {date ? format(date, "PPP") : <span>Select date</span>}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={date}
+                        onSelect={handleDateSelect}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
 
                 {userType === "patient" && (
                   <div className="space-y-2">
                     <Label htmlFor="bloodGroup">Blood Group</Label>
-                    <Select value={bloodGroup} onValueChange={(value) => setBloodGroup(value)}>
+                    <Select value={formData.bloodGroup} onValueChange={handleSelectChange("bloodGroup")}>
                       <SelectTrigger>
                         <SelectValue placeholder="Select blood group" />
                       </SelectTrigger>
@@ -418,8 +420,8 @@ const handleSubmit = async (e: React.FormEvent) => {
                       id="medicalHistory"
                       placeholder="Brief description of any relevant medical history, allergies, or conditions..."
                       rows={4}
-                      value={medicalHistory}
-                      onChange={(e) => setMedicalHistory(e.target.value)}
+                      value={formData.medicalHistory}
+                      onChange={handleInputChange}
                     />
                   </div>
 
@@ -455,7 +457,7 @@ const handleSubmit = async (e: React.FormEvent) => {
               </Button>
             </form>
           </CardContent>
-          
+
           <CardFooter className="flex flex-col space-y-4 text-center text-sm pt-8">
             <div className="text-gray-600">
               Already have an account?{" "}
@@ -463,8 +465,8 @@ const handleSubmit = async (e: React.FormEvent) => {
                 Sign in
               </Link>
             </div>
-            <Link 
-              to="/" 
+            <Link
+              to="/"
               className="inline-flex items-center text-gray-500 hover:text-gray-700 transition-colors"
             >
               <ArrowLeft className="h-4 w-4 mr-1" />
